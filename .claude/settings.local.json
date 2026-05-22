@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Recurse -Depth 4 \"C:\\\\Main\\\\code\\\\Apps\\\\financial-products-comparison-platform\")",
+      "Bash(Select-Object FullName, Length)",
+      "Bash(Format-Table -AutoSize)",
+      "Bash(find /mnt/c/Main/code/Apps/financial-products-comparison-platform -type f | head -100)",
+      "PowerShell(Get-ChildItem -Recurse -Depth 5 \"C:\\\\Main\\\\code\\\\Apps\\\\financial-products-comparison-platform\" | Where-Object { -not $_.PSIsContainer } | Select-Object FullName | Format-Table -AutoSize -Wrap)",
+      "Bash(curl -s \"https://www.bankofengland.co.uk/boeapps/iadb/fromshowcolumns.asp?csv.x=yes&Datefrom=01/Jan/2025&Dateto=01/May/2026&SeriesCodes=HSDG&CSVF=TN&UsingCodes=Y&VPD=Y&VFD=N\")",
+      "Bash(curl -s --max-time 10 \"https://www.bankofengland.co.uk/boeapps/iadb/fromshowcolumns.asp?csv.x=yes&Datefrom=01/Jan/2025&Dateto=01/May/2026&SeriesCodes=IUMBV34,IUMBV37,IUMBV42&CSVF=TN&UsingCodes=Y&VPD=Y&VFD=N\")",
+      "Bash(curl -v --max-time 15 \"https://www.bankofengland.co.uk/boeapps/iadb/fromshowcolumns.asp?csv.x=yes&Datefrom=01/Jan/2025&Dateto=01/May/2026&SeriesCodes=IUMBV34&CSVF=TN&UsingCodes=Y&VPD=Y&VFD=N\")",
+      "Bash(curl -L --max-time 20 \"https://www.bankofengland.co.uk/boeapps/iadb/fromshowcolumns.asp?csv.x=yes&Datefrom=01/Jan/2025&Dateto=01/May/2026&SeriesCodes=IUMBV34&CSVF=TN&UsingCodes=Y&VPD=Y&VFD=N\")",
+      "Bash(curl -L --max-time 20 \"https://www.bankofengland.co.uk/boeapps/iadb/fromshowcolumns.asp?csv.x=yes&Datefrom=01/Jan/2025&Dateto=01/May/2026&SeriesCodes=HSDG&CSVF=TN&UsingCodes=Y&VPD=Y&VFD=N\")",
+      "Bash(curl -L --max-time 20 \"https://www.bankofengland.co.uk/boeapps/iadb/fromshowcolumns.asp?csv.x=yes&Datefrom=01/Jan/2025&Dateto=01/May/2026&SeriesCodes=LPMVVZH&CSVF=TN&UsingCodes=Y&VPD=Y&VFD=N\")",
+      "Bash(curl -L --max-time 20 \"https://www.bankofengland.co.uk/boeapps/iadb/fromshowcolumns.asp?csv.x=yes&Datefrom=01/Jan/2025&Dateto=01/May/2026&SeriesCodes=IUMCCTL&CSVF=TN&UsingCodes=Y&VPD=Y&VFD=N\")",
+      "Bash(curl -L --max-time 20 \"https://www.bankofengland.co.uk/boeapps/iadb/fromshowcolumns.asp?csv.x=yes&Datefrom=01/Jan/2025&Dateto=01/May/2026&SeriesCodes=IUMZID2,IUMABEDR&CSVF=TN&UsingCodes=Y&VPD=Y&VFD=N\")",
+      "Bash(curl -s --max-time 15 \"https://api.ons.gov.uk/timeseries/d7g7/dataset/mm23/data\")",
+      "Bash(curl -s --max-time 15 \"https://api.beta.ons.gov.uk/v1/datasets/cpih01/timeseries/L55O/data\")",
+      "Bash(curl -s --max-time 15 \"https://api.ons.gov.uk/v1/datasets/mm23/timeseries/D7G7/data\")",
+      "Bash(curl -s --max-time 15 \"https://api.beta.ons.gov.uk/v1/timeseries/d7g7/dataset/mm23/data\")",
+      "Bash(curl -s --max-time 15 \"https://api.beta.ons.gov.uk/v1/datasets\")",
+      "Bash(curl -s --max-time 15 \"https://api.beta.ons.gov.uk/v1/datasets/cpih01/editions/time-series/versions/14/observations?time=*&geography=K02000001&aggregate=cpih1dim1A0\")",
+      "Bash(curl -s --max-time 15 \"https://www.ons.gov.uk/generator?format=csv&uri=/economy/inflationandpriceindices/timeseries/d7g7/mm23\")",
+      "Bash(curl -sL --max-time 15 \"https://www.ons.gov.uk/generator?format=csv&uri=/economy/inflationandpriceindices/timeseries/d7g7/mm23\")"
+    ]
+  }
+}

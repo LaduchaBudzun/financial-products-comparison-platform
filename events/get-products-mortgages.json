@@ -1,0 +1,11 @@
+{
+  "httpMethod": "GET",
+  "path": "/products/mortgages",
+  "pathParameters": {
+    "category": "mortgages"
+  },
+  "headers": {
+    "origin": "http://localhost:8080"
+  }
+}
+

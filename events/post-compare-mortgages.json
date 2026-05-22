@@ -1,0 +1,10 @@
+{
+  "httpMethod": "POST",
+  "path": "/compare",
+  "headers": {
+    "Content-Type": "application/json",
+    "origin": "http://localhost:8080"
+  },
+  "body": "{\"category\":\"mortgages\",\"criteria\":{\"riskTolerance\":\"medium\",\"loanAmount\":200000,\"ltv\":75,\"horizonMonths\":36,\"objective\":\"Looking to remortgage and keep monthly payments stable\"}}"
+}
+

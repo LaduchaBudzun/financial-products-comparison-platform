@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>UK Financial Products Comparison</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="layout">
+      <header class="hero">
+        <p class="eyebrow">UK Financial Products Comparison Platform</p>
+        <h1>Compare Mortgages, Savings, and Credit Cards</h1>
+        <p class="subtext">
+          Live public market data + AI-assisted reasoning. Informational use only.
+        </p>
+      </header>
+
+      <section class="panel controls">
+        <div class="field">
+          <label for="apiBaseUrl">API base URL</label>
+          <input id="apiBaseUrl" type="text" placeholder="https://.../v1" />
+        </div>
+        <div class="field">
+          <label for="category">Category</label>
+          <select id="category">
+            <option value="mortgages">Mortgages</option>
+            <option value="savings">Savings</option>
+            <option value="credit-cards">Credit cards</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="riskTolerance">Risk tolerance</label>
+          <select id="riskTolerance">
+            <option value="low">Low</option>
+            <option value="medium" selected>Medium</option>
+            <option value="high">High</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="loanAmount">Loan amount (£)</label>
+          <input id="loanAmount" type="number" min="1000" step="1000" value="200000" />
+        </div>
+        <div class="field">
+          <label for="ltv">LTV (%)</label>
+          <input id="ltv" type="number" min="1" max="100" step="1" value="75" />
+        </div>
+        <div class="field">
+          <label for="horizonMonths">Horizon (months)</label>
+          <input id="horizonMonths" type="number" min="1" max="480" step="1" value="36" />
+        </div>
+        <div class="field">
+          <label for="monthlySpend">Monthly card spend (£)</label>
+          <input id="monthlySpend" type="number" min="1" step="50" value="1500" />
+        </div>
+        <div class="field">
+          <label for="foreignSpendPercent">Foreign spend (%)</label>
+          <input id="foreignSpendPercent" type="number" min="0" max="100" step="1" value="20" />
+        </div>
+        <div class="field full">
+          <label for="objective">Objective / context</label>
+          <textarea id="objective" rows="2" placeholder="Looking to remortgage, £200k, 75% LTV..."></textarea>
+        </div>
+        <div class="actions">
+          <button id="loadProductsBtn" type="button">Load products</button>
+          <button id="compareBtn" type="button">Compare + recommend</button>
+        </div>
+      </section>
+
+      <section class="panel" id="statusPanel">
+        <h2>Status</h2>
+        <p id="statusText">Ready.</p>
+      </section>
+
+      <section class="panel">
+        <h2>Comparison Table</h2>
+        <div class="table-wrap">
+          <table id="productsTable">
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th>Type</th>
+                <th>Rate / APR</th>
+                <th>Real Return</th>
+                <th>Term</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Rate Trend</h2>
+        <canvas id="trendCanvas" width="1000" height="300"></canvas>
+      </section>
+
+      <section class="panel">
+        <h2>AI Insights</h2>
+        <pre id="insightsText">No insights yet.</pre>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
+

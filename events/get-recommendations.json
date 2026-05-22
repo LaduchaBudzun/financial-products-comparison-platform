@@ -1,0 +1,12 @@
+{
+  "httpMethod": "GET",
+  "path": "/recommendations",
+  "queryStringParameters": {
+    "category": "savings",
+    "criteria": "How do current savings rates compare to inflation?"
+  },
+  "headers": {
+    "origin": "http://localhost:8080"
+  }
+}
+

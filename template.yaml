@@ -1,0 +1,168 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: UK Financial Products Comparison Platform
+
+Parameters:
+  StageName:
+    Type: String
+    Default: v1
+    AllowedPattern: "^[a-zA-Z0-9_-]+$"
+    Description: API Gateway stage name
+  GeminiApiKey:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: Google Gemini API key
+  ExchangeRateApiKey:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: Optional API key for exchangerate.host
+  AllowedOrigins:
+    Type: String
+    Default: "*"
+    Description: Comma-separated origins for Lambda CORS header logic
+  CorsAllowOrigin:
+    Type: String
+    Default: "*"
+    Description: Single origin value for API Gateway CORS
+  CacheTtlSeconds:
+    Type: Number
+    Default: 3600
+    MinValue: 60
+    MaxValue: 86400
+    Description: Cache TTL for normalized market data
+  EnableExchangeData:
+    Type: String
+    Default: "false"
+    AllowedValues:
+      - "true"
+      - "false"
+    Description: Enable FX data enrichment for credit card scenarios
+  CacheTableName:
+    Type: String
+    Default: financial-products-cache
+    AllowedPattern: "^[a-zA-Z0-9_.-]{3,255}$"
+    Description: DynamoDB cache table name
+
+Globals:
+  Function:
+    Runtime: nodejs24.x
+    Handler: app.handler
+    Timeout: 15
+    MemorySize: 512
+    Tracing: Active
+    Environment:
+      Variables:
+        NODE_ENV: production
+        LOG_LEVEL: INFO
+        CACHE_TABLE_NAME: !Ref CacheTableName
+        CACHE_TTL_SECONDS: !Ref CacheTtlSeconds
+        CACHE_PROVIDER: dynamodb
+        BOE_BASE_URL: https://www.bankofengland.co.uk
+        ONS_BASE_URL: https://www.ons.gov.uk
+        GEMINI_BASE_URL: https://generativelanguage.googleapis.com
+        GEMINI_MODEL: gemini-2.0-flash
+        GEMINI_API_KEY: !Ref GeminiApiKey
+        DEFAULT_LOOKBACK_MONTHS: 24
+        REQUEST_TIMEOUT_MS: 5000
+        RETRY_ATTEMPTS: 2
+        RETRY_BASE_DELAY_MS: 250
+        ENABLE_EXCHANGE_DATA: !Ref EnableExchangeData
+        EXCHANGE_RATE_API_BASE_URL: https://api.exchangerate.host
+        EXCHANGE_RATE_API_KEY: !Ref ExchangeRateApiKey
+        EXCHANGE_RATE_FALLBACK_BASE_URL: https://api.frankfurter.app
+        ALLOWED_ORIGINS: !Ref AllowedOrigins
+    Tags:
+      Project: uk-financial-products-comparison
+      Environment: production
+
+Resources:
+  ComparisonApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: !Ref StageName
+      Cors:
+        AllowMethods: "'GET,POST,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization,X-Requested-With'"
+        AllowOrigin: !Sub "'${CorsAllowOrigin}'"
+      MethodSettings:
+        - HttpMethod: "*"
+          ResourcePath: "/*"
+          LoggingLevel: INFO
+          MetricsEnabled: true
+          DataTraceEnabled: false
+
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Description: REST API and AI analysis for UK financial products comparison
+      Events:
+        GetProducts:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ComparisonApi
+            Path: /products/{category}
+            Method: GET
+        Compare:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ComparisonApi
+            Path: /compare
+            Method: POST
+        Recommendations:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ComparisonApi
+            Path: /recommendations
+            Method: GET
+        OptionsProducts:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ComparisonApi
+            Path: /products/{category}
+            Method: OPTIONS
+        OptionsCompare:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ComparisonApi
+            Path: /compare
+            Method: OPTIONS
+        OptionsRecommendations:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ComparisonApi
+            Path: /recommendations
+            Method: OPTIONS
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CacheTable
+      ReservedConcurrentExecutions: 10
+
+  CacheTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref CacheTableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: cacheKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: cacheKey
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+Outputs:
+  ApiBaseUrl:
+    Description: Base API URL
+    Value: !Sub "https://${ComparisonApi}.execute-api.${AWS::Region}.amazonaws.com/${StageName}"
+  CacheTableName:
+    Description: DynamoDB cache table name
+    Value: !Ref CacheTableName
