@@ -202,7 +202,7 @@ No Docker or SAM CLI required. The Lambda handler is imported directly by a thin
 npm run run:flow
 ```
 
-Open **http://localhost:8090** — the API BASE URL field is pre-filled to `http://127.0.0.1:3000`.
+Open **http://localhost:8080** — the API BASE URL field is pre-filled to `http://127.0.0.1:3000`.
 
 Or start the two servers in separate terminals:
 

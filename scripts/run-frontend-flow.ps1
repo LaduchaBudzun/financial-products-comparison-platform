@@ -9,7 +9,7 @@
 ##############################################################################
 param(
   [int]$ApiPort      = 3000,
-  [int]$FrontendPort = 8090
+  [int]$FrontendPort = 8080
 )
 
 $ErrorActionPreference = "Stop"
