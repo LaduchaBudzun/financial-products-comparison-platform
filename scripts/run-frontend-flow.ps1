@@ -1,7 +1,7 @@
 ##############################################################################
 #  run-frontend-flow.ps1
 #  Starts the local API dev server + frontend in a single terminal.
-#  No Docker required — the Lambda handler runs directly via Node.js.
+#  No Docker required -- the Lambda handler runs directly via Node.js.
 #
 #  Usage:
 #    npm run run:flow
@@ -25,13 +25,12 @@ $node = Resolve-NodePath
 
 Push-Location $projectRoot
 try {
-  # ── Validate env ───────────────────────────────────────────────────────────
   if (-not (Test-Path "sam.local.env.json")) {
-    Write-Warning "sam.local.env.json not found — copy sam.local.env.example.json and add your GEMINI_API_KEY."
+    Write-Warning "sam.local.env.json not found -- copy sam.local.env.example.json and add your GEMINI_API_KEY."
   }
 
-  # ── Start API server (Docker-free Lambda wrapper) ─────────────────────────
   Write-Host "Starting API dev server on port $ApiPort..." -ForegroundColor Cyan
+
   $apiLog    = Join-Path $env:TEMP "dev-server-run.log"
   $apiErrLog = Join-Path $env:TEMP "dev-server-run-err.log"
   if (Test-Path $apiLog)    { Remove-Item $apiLog    -Force }
@@ -46,7 +45,6 @@ try {
     -RedirectStandardError  $apiErrLog `
     -PassThru
 
-  # ── Wait for API to be ready ───────────────────────────────────────────────
   $ready   = $false
   $timeout = (Get-Date).AddSeconds(20)
   while ((Get-Date) -lt $timeout) {
@@ -64,15 +62,12 @@ try {
 
   Write-Host "API ready at http://127.0.0.1:$ApiPort" -ForegroundColor Green
 
-  # ── Start frontend ─────────────────────────────────────────────────────────
   $env:PORT = "$FrontendPort"
   Write-Host ""
-  Write-Host "╔════════════════════════════════════════════════════╗" -ForegroundColor Yellow
-  Write-Host "║  Dashboard:  http://localhost:$FrontendPort             ║" -ForegroundColor Yellow
-  Write-Host "║  API:        http://127.0.0.1:$ApiPort                 ║" -ForegroundColor Yellow
-  Write-Host "║  API BASE URL is pre-filled in the dashboard.      ║" -ForegroundColor Yellow
-  Write-Host "║  Press Ctrl+C to stop both servers.                ║" -ForegroundColor Yellow
-  Write-Host "╚════════════════════════════════════════════════════╝" -ForegroundColor Yellow
+  Write-Host "  Dashboard : http://localhost:$FrontendPort" -ForegroundColor Yellow
+  Write-Host "  API       : http://127.0.0.1:$ApiPort" -ForegroundColor Yellow
+  Write-Host "  API BASE URL is pre-filled in the dashboard." -ForegroundColor Yellow
+  Write-Host "  Press Ctrl+C to stop." -ForegroundColor Yellow
   Write-Host ""
 
   try {
