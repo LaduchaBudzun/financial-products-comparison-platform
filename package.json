@@ -8,10 +8,12 @@
     "@aws-sdk/lib-dynamodb": "^3.920.0"
   },
   "scripts": {
-    "test": "node --test tests/unit/*.test.js",
+    "test": "node --test tests/unit/boeClient.test.js tests/unit/comparisonService.test.js tests/unit/httpSecurity.test.js tests/unit/marketDataService.test.js tests/unit/onsClient.test.js tests/unit/retry.test.js tests/unit/validator.test.js",
+    "start:api": "node scripts/dev-server.mjs",
     "start:frontend": "node scripts/serve-frontend.js",
     "smoke:local": "powershell -ExecutionPolicy Bypass -File .\\scripts\\smoke-local.ps1",
-    "deploy:prod": "powershell -ExecutionPolicy Bypass -File .\\scripts\\deploy-prod.ps1"
+    "deploy:prod": "powershell -ExecutionPolicy Bypass -File .\\scripts\\deploy-prod.ps1",
+    "run:flow": "powershell -ExecutionPolicy Bypass -File .\\scripts\\run-frontend-flow.ps1"
   },
   "engines": {
     "node": ">=20"

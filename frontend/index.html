@@ -3,105 +3,188 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>UK Financial Products Comparison</title>
+    <title>UK Financial Products Comparison Platform</title>
     <link rel="stylesheet" href="./styles.css" />
+    <!-- Chart.js for professional trend visualisation -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
   </head>
   <body>
+    <!-- Loading overlay -->
+    <div id="loadingOverlay" class="loading-overlay hidden" aria-live="polite" aria-label="Loading">
+      <div class="spinner"></div>
+      <p id="loadingLabel">Loading…</p>
+    </div>
+
     <main class="layout">
+      <!-- Header -->
       <header class="hero">
-        <p class="eyebrow">UK Financial Products Comparison Platform</p>
-        <h1>Compare Mortgages, Savings, and Credit Cards</h1>
-        <p class="subtext">
-          Live public market data + AI-assisted reasoning. Informational use only.
-        </p>
+        <div class="hero-inner">
+          <div class="hero-badge">🇬🇧 UK Financial Data</div>
+          <h1>Financial Products Comparison</h1>
+          <p class="subtext">
+            Live Bank of England &amp; ONS data · AI-powered analysis via Gemini ·
+            <strong>Informational only — not regulated advice</strong>
+          </p>
+        </div>
       </header>
 
-      <section class="panel controls">
-        <div class="field">
-          <label for="apiBaseUrl">API base URL</label>
-          <input id="apiBaseUrl" type="text" placeholder="https://.../v1" />
+      <!-- Category tabs -->
+      <nav class="tabs" role="tablist">
+        <button class="tab active" data-category="mortgages" role="tab" aria-selected="true">
+          🏠 Mortgages
+        </button>
+        <button class="tab" data-category="savings" role="tab" aria-selected="false">
+          💰 Savings
+        </button>
+        <button class="tab" data-category="credit-cards" role="tab" aria-selected="false">
+          💳 Credit Cards
+        </button>
+      </nav>
+
+      <!-- Controls panel -->
+      <section class="panel controls" aria-label="Comparison criteria">
+        <div class="controls-top">
+          <div class="field">
+            <label for="apiBaseUrl">API base URL</label>
+            <input id="apiBaseUrl" type="url" value="http://127.0.0.1:3000" placeholder="http://127.0.0.1:3000 or https://…/v1" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="riskTolerance">Risk tolerance</label>
+            <select id="riskTolerance">
+              <option value="low">🟢 Low — prefer certainty</option>
+              <option value="medium" selected>🟡 Medium — balanced</option>
+              <option value="high">🔴 High — maximise return</option>
+            </select>
+          </div>
         </div>
-        <div class="field">
-          <label for="category">Category</label>
-          <select id="category">
-            <option value="mortgages">Mortgages</option>
-            <option value="savings">Savings</option>
-            <option value="credit-cards">Credit cards</option>
-          </select>
+
+        <!-- Mortgage-specific fields -->
+        <div id="mortgageFields" class="criteria-group">
+          <div class="field">
+            <label for="loanAmount">Loan / mortgage amount (£)</label>
+            <input id="loanAmount" type="number" min="1000" max="5000000" step="5000" value="200000" />
+          </div>
+          <div class="field">
+            <label for="ltv">Loan-to-value (LTV %)</label>
+            <input id="ltv" type="number" min="1" max="100" step="1" value="75" />
+          </div>
+          <div class="field">
+            <label for="horizonMonths">Fix horizon (months)</label>
+            <input id="horizonMonths" type="number" min="1" max="480" step="12" value="36" />
+          </div>
         </div>
-        <div class="field">
-          <label for="riskTolerance">Risk tolerance</label>
-          <select id="riskTolerance">
-            <option value="low">Low</option>
-            <option value="medium" selected>Medium</option>
-            <option value="high">High</option>
-          </select>
+
+        <!-- Savings-specific fields -->
+        <div id="savingsFields" class="criteria-group hidden">
+          <div class="field">
+            <label for="savingsAmount">Amount to save (£)</label>
+            <input id="savingsAmount" type="number" min="100" max="500000" step="1000" value="20000" />
+          </div>
         </div>
-        <div class="field">
-          <label for="loanAmount">Loan amount (£)</label>
-          <input id="loanAmount" type="number" min="1000" step="1000" value="200000" />
+
+        <!-- Credit card-specific fields -->
+        <div id="creditCardFields" class="criteria-group hidden">
+          <div class="field">
+            <label for="monthlySpend">Monthly card spend (£)</label>
+            <input id="monthlySpend" type="number" min="1" max="100000" step="100" value="1500" />
+          </div>
+          <div class="field">
+            <label for="foreignSpendPercent">Overseas spend (%)</label>
+            <input id="foreignSpendPercent" type="number" min="0" max="100" step="5" value="20" />
+          </div>
         </div>
-        <div class="field">
-          <label for="ltv">LTV (%)</label>
-          <input id="ltv" type="number" min="1" max="100" step="1" value="75" />
-        </div>
-        <div class="field">
-          <label for="horizonMonths">Horizon (months)</label>
-          <input id="horizonMonths" type="number" min="1" max="480" step="1" value="36" />
-        </div>
-        <div class="field">
-          <label for="monthlySpend">Monthly card spend (£)</label>
-          <input id="monthlySpend" type="number" min="1" step="50" value="1500" />
-        </div>
-        <div class="field">
-          <label for="foreignSpendPercent">Foreign spend (%)</label>
-          <input id="foreignSpendPercent" type="number" min="0" max="100" step="1" value="20" />
-        </div>
+
+        <!-- Shared objective -->
         <div class="field full">
-          <label for="objective">Objective / context</label>
-          <textarea id="objective" rows="2" placeholder="Looking to remortgage, £200k, 75% LTV..."></textarea>
+          <label for="objective">Your situation / objective (optional)</label>
+          <textarea id="objective" rows="2" maxlength="300"
+            placeholder="e.g. Looking to remortgage, £200k balance, want predictable payments for next 3 years…"></textarea>
+          <span class="char-count"><span id="charCount">0</span>/300</span>
         </div>
+
         <div class="actions">
-          <button id="loadProductsBtn" type="button">Load products</button>
-          <button id="compareBtn" type="button">Compare + recommend</button>
+          <button id="loadProductsBtn" type="button" class="btn-primary">
+            <span>Load market data</span>
+          </button>
+          <button id="compareBtn" type="button" class="btn-secondary">
+            <span>Compare &amp; get AI recommendation</span>
+          </button>
         </div>
       </section>
 
-      <section class="panel" id="statusPanel">
-        <h2>Status</h2>
-        <p id="statusText">Ready.</p>
-      </section>
+      <!-- Status bar -->
+      <div id="statusBar" class="status-bar hidden" role="status" aria-live="polite">
+        <span id="statusIcon">ℹ️</span>
+        <span id="statusText"></span>
+      </div>
 
-      <section class="panel">
-        <h2>Comparison Table</h2>
+      <!-- Products table -->
+      <section class="panel" id="productsPanel" aria-label="Products table">
+        <div class="panel-header">
+          <h2>Market Products &amp; Rates</h2>
+          <span id="dataSourceBadge" class="badge hidden"></span>
+          <span id="cacheBadge" class="badge badge-muted hidden">cached</span>
+        </div>
         <div class="table-wrap">
-          <table id="productsTable">
+          <table id="productsTable" aria-label="Products comparison table">
             <thead>
               <tr>
                 <th>Product</th>
                 <th>Type</th>
                 <th>Rate / APR</th>
-                <th>Real Return</th>
-                <th>Term</th>
+                <th class="col-real">Real Return</th>
+                <th class="col-term">Term</th>
+                <th class="col-notes">Notes</th>
               </tr>
             </thead>
-            <tbody></tbody>
+            <tbody id="productsTableBody">
+              <tr class="empty-row">
+                <td colspan="6">Select a category and click "Load market data"</td>
+              </tr>
+            </tbody>
           </table>
         </div>
       </section>
 
-      <section class="panel">
-        <h2>Rate Trend</h2>
-        <canvas id="trendCanvas" width="1000" height="300"></canvas>
+      <!-- Trend chart -->
+      <section class="panel" id="chartPanel" aria-label="Rate trend chart">
+        <div class="panel-header">
+          <h2>Rate Trend</h2>
+          <span id="chartPeriod" class="badge badge-muted hidden"></span>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="trendChart" role="img" aria-label="Rate trend line chart"></canvas>
+        </div>
+        <p class="chart-note hidden" id="chartNote"></p>
       </section>
 
-      <section class="panel">
-        <h2>AI Insights</h2>
-        <pre id="insightsText">No insights yet.</pre>
+      <!-- Comparison results -->
+      <section class="panel hidden" id="comparisonPanel" aria-label="Comparison results">
+        <h2>Comparison Result</h2>
+        <div id="winnerCard" class="winner-card"></div>
+        <details class="ranking-details">
+          <summary>Full ranking</summary>
+          <div id="rankingTable"></div>
+        </details>
       </section>
+
+      <!-- AI insights -->
+      <section class="panel" id="insightsPanel" aria-label="AI insights">
+        <div class="panel-header">
+          <h2>AI Insights</h2>
+          <span id="aiModeBadge" class="badge hidden"></span>
+        </div>
+        <div id="insightsContent" class="insights-placeholder">
+          <p>Load market data and click <strong>Compare &amp; get AI recommendation</strong> to see Gemini-powered analysis based on live rates.</p>
+        </div>
+      </section>
+
+      <!-- Disclaimers -->
+      <footer class="disclaimers">
+        <p>⚠️ <strong>Informational tool only</strong> — not regulated financial advice under the Financial Services and Markets Act 2000 (FSMA). Always verify rates, fees, and eligibility with FCA-authorised providers before making financial decisions. Data sourced from Bank of England and ONS public APIs.</p>
+      </footer>
     </main>
 
     <script type="module" src="./app.js"></script>
   </body>
 </html>
-

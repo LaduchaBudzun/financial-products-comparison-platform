@@ -1,81 +1,89 @@
+##############################################################################
+#  run-frontend-flow.ps1
+#  Starts the local API dev server + frontend in a single terminal.
+#  No Docker required — the Lambda handler runs directly via Node.js.
+#
+#  Usage:
+#    npm run run:flow
+#    powershell -ExecutionPolicy Bypass -File .\scripts\run-frontend-flow.ps1
+##############################################################################
 param(
-  [int]$ApiPort = 3000,
-  [int]$FrontendPort = 8090,
-  [switch]$SkipBuild
+  [int]$ApiPort      = 3000,
+  [int]$FrontendPort = 8090
 )
 
 $ErrorActionPreference = "Stop"
-
-function Resolve-SamPath {
-  $cmd = Get-Command sam -ErrorAction SilentlyContinue
-  if ($cmd) { return $cmd.Source }
-  $fallback = "C:\Users\laduc\AppData\Local\Programs\Amazon\AWSSAMCLI\bin\sam.cmd"
-  if (Test-Path $fallback) { return $fallback }
-  throw "SAM CLI not found. Install SAM CLI first."
-}
+$projectRoot = Split-Path -Parent $PSScriptRoot
 
 function Resolve-NodePath {
   $cmd = Get-Command node -ErrorAction SilentlyContinue
   if ($cmd) { return $cmd.Source }
-  $fallback = "C:\Users\laduc\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe"
-  if (Test-Path $fallback) { return $fallback }
-  throw "Node.js not found. Install Node.js first."
+  throw "Node.js not found. Install Node.js 20+ from https://nodejs.org"
 }
 
-$projectRoot = Split-Path -Parent $PSScriptRoot
+$node = Resolve-NodePath
+
 Push-Location $projectRoot
 try {
-  $sam = Resolve-SamPath
-  $node = Resolve-NodePath
-
-  if (-not $SkipBuild) {
-    Write-Host "Building SAM app..."
-    & $sam build --use-container
-    if ($LASTEXITCODE -ne 0) { throw "sam build failed." }
+  # ── Validate env ───────────────────────────────────────────────────────────
+  if (-not (Test-Path "sam.local.env.json")) {
+    Write-Warning "sam.local.env.json not found — copy sam.local.env.example.json and add your GEMINI_API_KEY."
   }
 
-  $outLog = Join-Path $projectRoot "sam-local.out.log"
-  $errLog = Join-Path $projectRoot "sam-local.err.log"
-  if (Test-Path $outLog) { Remove-Item $outLog -Force }
-  if (Test-Path $errLog) { Remove-Item $errLog -Force }
+  # ── Start API server (Docker-free Lambda wrapper) ─────────────────────────
+  Write-Host "Starting API dev server on port $ApiPort..." -ForegroundColor Cyan
+  $apiLog    = Join-Path $env:TEMP "dev-server-run.log"
+  $apiErrLog = Join-Path $env:TEMP "dev-server-run-err.log"
+  if (Test-Path $apiLog)    { Remove-Item $apiLog    -Force }
+  if (Test-Path $apiErrLog) { Remove-Item $apiErrLog -Force }
 
-  Write-Host "Starting local API on port $ApiPort..."
-  $api = Start-Process -FilePath $sam -ArgumentList @("local","start-api","--env-vars","sam.local.env.json","--port","$ApiPort") -WorkingDirectory $projectRoot -WindowStyle Hidden -RedirectStandardOutput $outLog -RedirectStandardError $errLog -PassThru
+  $env:PORT = "$ApiPort"
+  $apiProc = Start-Process -FilePath $node `
+    -ArgumentList "scripts/dev-server.mjs" `
+    -WorkingDirectory $projectRoot `
+    -WindowStyle Hidden `
+    -RedirectStandardOutput $apiLog `
+    -RedirectStandardError  $apiErrLog `
+    -PassThru
 
-  $ready = $false
-  $timeout = (Get-Date).AddMinutes(2)
+  # ── Wait for API to be ready ───────────────────────────────────────────────
+  $ready   = $false
+  $timeout = (Get-Date).AddSeconds(20)
   while ((Get-Date) -lt $timeout) {
-    if (Test-Path $errLog) {
-      $content = Get-Content $errLog -Raw
-      if ($content -match "Running on http://127.0.0.1:$ApiPort") {
-        $ready = $true
-        break
-      }
+    if (Test-Path $apiLog) {
+      $content = Get-Content $apiLog -Raw -ErrorAction SilentlyContinue
+      if ($content -match "Local Dev Server") { $ready = $true; break }
     }
-    Start-Sleep -Seconds 2
-  }
-  if (-not $ready) {
-    throw "SAM local API did not start in time. Check $errLog"
+    Start-Sleep -Milliseconds 500
   }
 
-  Write-Host "Starting frontend on port $FrontendPort..."
+  if (-not $ready) {
+    if (Test-Path $apiErrLog) { Get-Content $apiErrLog | Select-Object -First 20 }
+    throw "API server did not start in 20 s. Check $apiErrLog"
+  }
+
+  Write-Host "API ready at http://127.0.0.1:$ApiPort" -ForegroundColor Green
+
+  # ── Start frontend ─────────────────────────────────────────────────────────
   $env:PORT = "$FrontendPort"
   Write-Host ""
-  Write-Host "Frontend URL: http://localhost:$FrontendPort"
-  Write-Host "In UI set API base URL: http://127.0.0.1:$ApiPort"
-  Write-Host "Press Ctrl+C to stop frontend and API."
+  Write-Host "╔════════════════════════════════════════════════════╗" -ForegroundColor Yellow
+  Write-Host "║  Dashboard:  http://localhost:$FrontendPort             ║" -ForegroundColor Yellow
+  Write-Host "║  API:        http://127.0.0.1:$ApiPort                 ║" -ForegroundColor Yellow
+  Write-Host "║  API BASE URL is pre-filled in the dashboard.      ║" -ForegroundColor Yellow
+  Write-Host "║  Press Ctrl+C to stop both servers.                ║" -ForegroundColor Yellow
+  Write-Host "╚════════════════════════════════════════════════════╝" -ForegroundColor Yellow
   Write-Host ""
 
   try {
     & $node scripts/serve-frontend.js
-  }
-  finally {
-    if ($api -and -not $api.HasExited) {
-      Stop-Process -Id $api.Id -Force -ErrorAction SilentlyContinue
+  } finally {
+    if ($apiProc -and -not $apiProc.HasExited) {
+      Stop-Process -Id $apiProc.Id -Force -ErrorAction SilentlyContinue
+      Write-Host "API server stopped." -ForegroundColor Gray
     }
   }
-}
-finally {
+} finally {
+  $env:PORT = ""
   Pop-Location
 }
-

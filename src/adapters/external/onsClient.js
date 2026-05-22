@@ -63,14 +63,14 @@ export class OnsClient {
   }
 
   async getTimeSeries(seriesId) {
-    // ONS website generator endpoint (the legacy timeseries API was retired Nov 2024)
-    const path = "/generator";
-    const query = {
-      format: "csv",
-      uri: `/economy/inflationandpriceindices/timeseries/${seriesId.toLowerCase()}/mm23`
-    };
+    // ONS website generator endpoint (the legacy timeseries API was retired Nov 2024).
+    // NOTE: The `uri` query param contains literal forward-slashes that must NOT be
+    // percent-encoded (%2F).  We embed the full query string in the path so that
+    // URLSearchParams never touches it.
+    const encodedId = encodeURIComponent(seriesId.toLowerCase());
+    const path = `/generator?format=csv&uri=/economy/inflationandpriceindices/timeseries/${encodedId}/mm23`;
 
-    const raw = await this.httpClient.getText(this.baseUrl, path, query);
+    const raw = await this.httpClient.getText(this.baseUrl, path);
     const rows = parseCsv(raw);
 
     if (!rows.length) {

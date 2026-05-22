@@ -1,274 +1,259 @@
-# UK Financial Products Comparison Platform (Serverless, AWS)
+# UK Financial Products Comparison Platform
 
-Production-oriented home assignment implementation for comparing UK financial products using live public market data and AI-assisted analysis.
+> Serverless AWS application that pulls **live public market data**, enriches it with **Gemini AI analysis**, and presents actionable insights for UK consumers comparing mortgages, savings accounts, and credit cards.
 
-## 1) What This Builds
+---
 
-Serverless application with:
+## Architecture
 
-- **AWS Lambda** (single function with route handlers)
-- **API Gateway (REST)** with required endpoints
-- **DynamoDB cache** (TTL-enabled)
-- **CloudWatch logging/metrics**
-- **Live public data integrations**:
-  - Bank of England Statistical API (rates)
-  - ONS API (UK inflation benchmark)
-  - Optional exchange-rate enrichment (exchangerate.host + Frankfurter fallback)
-- **AI recommendations** via **Google Gemini API** with deterministic fallback
-- **Frontend dashboard** (HTML/CSS/JS) with table + chart + comparison form + AI insights
-
-## 2) Architecture
-
-```text
-Browser Dashboard (frontend/)
-      |
-      v
+```
+Browser Dashboard  (frontend/ — HTML + CSS + Chart.js, no build step)
+        │
+        ▼
 API Gateway (REST)
-      |
-      v
-Lambda (src/app.js)
-  |- Handlers (products/compare/recommendations)
-  |- Services (market-data/comparison/recommendation)
-  |- External adapters
-  |    |- Bank of England API
-  |    |- ONS API
-  |    |- Gemini API
-  |    |- Exchange rate APIs (optional enrichment)
-  |- Cache adapter
-       |- DynamoDB (prod)
-       |- In-memory (local fallback)
+  ├─ GET  /products/{category}
+  ├─ POST /compare
+  └─ GET  /recommendations
+        │
+        ▼
+Lambda  src/app.js  (Node.js 24.x · single function · 512 MB · 15s timeout)
+  │
+  ├──► Bank of England Statistical API   (mortgage / savings / base-rate CSV series)
+  ├──► ONS website generator CSV         (CPI inflation — api.ons.gov.uk retired Nov 2024)
+  ├──► Frankfurter / ECB                 (GBP exchange rates — free, no key needed)
+  ├──► Google Gemini API                 (AI recommendations · key sent via header, not URL)
+  └──► DynamoDB (prod) / in-memory (local)  (TTL cache · SSE encrypted · PITR enabled)
 ```
 
-### Design principles used
+### Design principles
 
-- **SOLID**: dependencies are injected via container; adapters and services have single responsibility.
-- **KISS**: one Lambda, explicit route handling, no unnecessary orchestration.
-- **DRY**: shared validation, error, HTTP client, retry, and response modules.
+| Principle | How applied |
+|-----------|-------------|
+| **SOLID** | Each external API has its own adapter class; services depend on injected interfaces; `container.js` wires everything via dependency injection |
+| **KISS** | One Lambda with explicit route dispatch — no service mesh, no unnecessary orchestration layers |
+| **DRY** | Shared `retry`, `csvUtils`, `dateUtils`, `mathUtils`, `http`, `errors`, `validation` modules used across all handlers |
+| **Security-first** | API key in header not URL; body size limit 50 KB; prompt sanitisation; HTML escaping in UI; no stack traces exposed to clients |
 
-## 3) Core Features vs Assignment
+---
 
-- Data layer:
-  - Live fetch + normalization for BoE/ONS
-  - Retry with exponential backoff + jitter
-  - Timeout protection and error classification
-  - Caching with TTL (DynamoDB in AWS, in-memory in local mode)
-- AI analysis layer:
-  - Gemini prompt with context from normalized live data
-  - Deterministic rule-based fallback if AI unavailable
-  - Safety language in prompts and output disclaimers
-- REST endpoints (required):
-  - `GET /products/{category}`
-  - `POST /compare`
-  - `GET /recommendations?criteria=...`
-- Frontend dashboard:
-  - Comparison controls and table
-  - Trend visualization (`<canvas>`)
-  - AI insights panel
+## Data Sources
 
-## 4) Data Sources
+| Source | Auth | Data used | Status |
+|--------|------|-----------|--------|
+| **Bank of England** Statistical Database | None | `IUMBV34` 2yr fixed, `IUMBV37` 3yr fixed, `IUMBV42` 5yr fixed, `IUMABEDR` Bank Rate, `IUMZID2` 2yr ISA, `IUMCCTL` CC APR | ✅ Live verified |
+| **ONS** CPI via `ons.gov.uk/generator` | None | `D7G7` CPI annual rate — note: `api.ons.gov.uk` was **decommissioned 25 Nov 2024** | ✅ Live verified |
+| **Frankfurter / ECB** | None | `GBP → USD, EUR` for credit card FX cost modelling (`ENABLE_EXCHANGE_DATA=true`) | ✅ Live verified |
+| **Google Gemini** `gemini-2.0-flash` | API key | AI-powered product recommendations; deterministic fallback on quota/failure | ✅ Key verified |
 
-1. **Bank of England Statistical Database** (live)
-   - Mortgage benchmarks, base rate series, savings benchmark, credit card benchmark
-2. **ONS API** (live)
-   - UK CPI annual inflation series for real-return context
-3. **Optional enrichment**:
-   - exchangerate.host (if enabled via env)
-   - Frankfurter/ECB fallback
+---
 
-Reasoning:
-- BoE + ONS provide zero-cost, public, UK-relevant fundamentals without paid dependencies.
-- Exchange-rate feed is optional enrichment for credit card foreign-spend analysis.
+## API Reference
 
-## 5) API Reference
+All responses include `X-Request-ID`, security headers (`X-Content-Type-Options`, `X-Frame-Options`, `CSP`, `Cache-Control: no-store`), and CORS headers.
 
 ### `GET /products/{category}`
 
-Supported categories:
-- `mortgages`
-- `savings`
-- `credit-cards`
-
-Example:
+`category` ∈ `mortgages` | `savings` | `credit-cards`
 
 ```bash
 curl "$API_BASE/products/mortgages"
+curl "$API_BASE/products/savings"
+curl "$API_BASE/products/credit-cards"
 ```
 
-Response (shape):
+Response shape:
 
 ```json
 {
   "data": {
     "category": "mortgages",
-    "asOf": "2026-05-21T12:00:00.000Z",
+    "asOf": "2026-05-22T10:00:00.000Z",
     "sources": ["Bank of England"],
-    "products": [],
-    "trends": {},
+    "products": [
+      {
+        "id": "mortgage_fixed_2y_75_ltv",
+        "label": "2-year fixed mortgage (75% LTV)",
+        "type": "fixed",
+        "termMonths": 24,
+        "ratePercent": 5.14
+      },
+      {
+        "id": "mortgage_tracker_proxy",
+        "label": "Tracker mortgage proxy (Bank Rate + 1.15%)",
+        "type": "variable",
+        "termMonths": null,
+        "ratePercent": 4.90,
+        "assumptions": ["Proxy benchmark for comparison only"]
+      }
+    ],
+    "trends": {
+      "fixed2y": [{ "date": "2024-01-31", "value": 5.45 }, "…"],
+      "bankRate": ["…"]
+    },
     "cache": { "hit": false }
   },
-  "disclaimers": []
+  "disclaimers": ["Informational tool only, not regulated financial advice."]
 }
 ```
 
 ### `POST /compare`
 
-Example:
+```bash
+curl -X POST "$API_BASE/compare" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "category": "mortgages",
+    "criteria": {
+      "riskTolerance": "medium",
+      "loanAmount": 200000,
+      "ltv": 75,
+      "horizonMonths": 36,
+      "objective": "Looking to remortgage with predictable payments"
+    }
+  }'
+```
+
+Response includes `comparison.winner`, `comparison.ranking[]`, and `recommendation` (AI text or deterministic fallback with structured recommendations).
+
+**Credit card example:**
 
 ```bash
 curl -X POST "$API_BASE/compare" \
   -H "Content-Type: application/json" \
   -d '{
-    "category":"mortgages",
-    "criteria":{
-      "riskTolerance":"medium",
-      "loanAmount":200000,
-      "ltv":75,
-      "horizonMonths":36,
-      "objective":"Looking to remortgage with predictable payments"
+    "category": "credit-cards",
+    "criteria": {
+      "monthlySpend": 1500,
+      "foreignSpendPercent": 30,
+      "riskTolerance": "medium"
     }
   }'
 ```
 
-Response includes:
-- normalized criteria
-- ranking and winner
-- AI recommendation (or deterministic fallback)
-
-### `GET /recommendations?criteria=...`
-
-Example:
+### `GET /recommendations`
 
 ```bash
+# Free-text criteria
 curl "$API_BASE/recommendations?category=savings&criteria=How%20do%20savings%20rates%20compare%20to%20inflation%3F"
+
+# JSON criteria
+curl "$API_BASE/recommendations?category=mortgages&criteria=%7B%22riskTolerance%22%3A%22low%22%2C%22horizonMonths%22%3A24%7D"
+
+# Disable AI (rules-only mode)
+curl "$API_BASE/recommendations?category=savings&includeAi=false"
 ```
 
-## 6) Environment Variables
+---
 
-| Variable | Required | Default | Purpose |
-|---|---|---|---|
-| `CACHE_PROVIDER` | no | `memory` | `dynamodb` in AWS, `memory` for local |
-| `CACHE_TABLE_NAME` | no | `financial-products-cache` | DynamoDB table |
-| `CACHE_TTL_SECONDS` | no | `3600` | API response cache TTL |
-| `BOE_BASE_URL` | no | `https://www.bankofengland.co.uk` | BoE base URL |
-| `ONS_BASE_URL` | no | `https://api.ons.gov.uk` | ONS base URL |
-| `GEMINI_API_KEY` | **yes for AI mode** | - | Gemini API key |
-| `GEMINI_BASE_URL` | no | `https://generativelanguage.googleapis.com` | Gemini API base |
-| `GEMINI_MODEL` | no | `gemini-2.0-flash` | model name |
-| `REQUEST_TIMEOUT_MS` | no | `5000` | per external request timeout |
-| `RETRY_ATTEMPTS` | no | `2` | transient retry count |
-| `RETRY_BASE_DELAY_MS` | no | `250` | retry base delay |
-| `ALLOWED_ORIGINS` | no | `*` | comma-separated CORS allow list |
-| `ENABLE_EXCHANGE_DATA` | no | `false` | optional FX enrichment |
-| `EXCHANGE_RATE_API_BASE_URL` | no | `https://api.exchangerate.host` | primary FX |
-| `EXCHANGE_RATE_API_KEY` | optional | - | API key for exchangerate.host if needed |
-| `EXCHANGE_RATE_FALLBACK_BASE_URL` | no | `https://api.frankfurter.app` | fallback FX source |
+## Environment Variables
 
-## 7) Local Run
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `GEMINI_API_KEY` | **Yes (AI mode)** | — | Free key at https://aistudio.google.com |
+| `CACHE_PROVIDER` | No | `memory` | `dynamodb` in AWS, `memory` locally |
+| `CACHE_TABLE_NAME` | No | `financial-products-cache` | DynamoDB table name |
+| `CACHE_TTL_SECONDS` | No | `3600` | Cache TTL seconds (60–86400) |
+| `ALLOWED_ORIGINS` | No | `*` | Comma-separated CORS origins |
+| `ENABLE_EXCHANGE_DATA` | No | `false` | Enable GBP FX enrichment for credit cards |
+| `EXCHANGE_RATE_API_KEY` | No | — | Optional key for exchangerate.host |
+| `BOE_BASE_URL` | No | `https://www.bankofengland.co.uk` | BoE base URL |
+| `ONS_BASE_URL` | No | `https://www.ons.gov.uk` | ONS base — **not** the retired `api.ons.gov.uk` |
+| `GEMINI_BASE_URL` | No | `https://generativelanguage.googleapis.com` | Gemini API base |
+| `GEMINI_MODEL` | No | `gemini-2.0-flash` | Gemini model name |
+| `REQUEST_TIMEOUT_MS` | No | `5000` | Per-request timeout ms |
+| `RETRY_ATTEMPTS` | No | `2` | Transient retry count |
+| `RETRY_BASE_DELAY_MS` | No | `250` | Retry base delay (exponential backoff + jitter) |
+| `LOG_LEVEL` | No | `info` | `debug` / `info` / `warn` / `error` |
+
+---
+
+## Local Development
 
 ### Prerequisites
 
-- AWS SAM CLI
-- Docker (for `sam local`)
-- Node.js 20+ (for local scripts/tests)
+- **Node.js 20+** (Lambda runtime is Node.js 24.x in AWS)
+- **Gemini API key** — free at https://aistudio.google.com (no credit card required)
+- **AWS SAM CLI + Docker** — only needed for `sam local` or `sam build`; the Docker-free path below works without either
 
-### Steps
-
-1. Install dependencies:
+### Setup
 
 ```bash
+# 1. Install dependencies
 npm install
-```
 
-2. Create local env files from templates and set your Gemini key:
-
-```bash
-cp .env.local.example .env.local
+# 2. Copy env templates
+cp .env.local.example .env.local                   # Linux / macOS
 cp sam.local.env.example.json sam.local.env.json
+
+# Windows PowerShell:
+Copy-Item .env.local.example .env.local
+Copy-Item sam.local.env.example.json sam.local.env.json
+
+# 3. Add your Gemini key to sam.local.env.json:
+#    "GEMINI_API_KEY": "YOUR_KEY_HERE"
 ```
 
-For Windows PowerShell:
+### Running locally — Docker-free (recommended for first run)
 
-```powershell
-Copy-Item .env.local.example .env.local -Force
-Copy-Item sam.local.env.example.json sam.local.env.json -Force
-```
-
-Set `GEMINI_API_KEY` inside `sam.local.env.json`.
-
-3. Build:
+No Docker or SAM CLI required. The Lambda handler is imported directly by a thin Node HTTP wrapper.
 
 ```bash
-sam build
+# One command: starts API on :3000 and dashboard on :8090
+npm run run:flow
 ```
 
-4. Start API locally:
+Open **http://localhost:8090** — the API BASE URL field is pre-filled to `http://127.0.0.1:3000`.
+
+Or start the two servers in separate terminals:
 
 ```bash
-sam local start-api --env-vars sam.local.env.json
+# Terminal 1 — API (Lambda handler, no Docker)
+npm run start:api        # http://127.0.0.1:3000
+
+# Terminal 2 — Dashboard
+npm run start:frontend   # http://localhost:8080
 ```
 
-5. Start frontend (in another terminal):
+### Running locally — with Docker + SAM CLI
 
 ```bash
-npm run start:frontend
+sam build --use-container
+sam local start-api --env-vars sam.local.env.json   # API on :3000
+npm run start:frontend                              # Dashboard on :8080
 ```
 
-If port `8080` is occupied:
+### Other useful commands
 
 ```bash
-PORT=8090 npm run start:frontend
-```
+# Run all 7 unit test suites (no network, no Docker required)
+npm test
 
-For Windows PowerShell:
+# Verify all live external APIs respond correctly (requires internet)
+node scripts/smoke-live-apis.mjs
 
-```powershell
-$env:PORT=8090
-npm run start:frontend
-```
-
-6. Open dashboard:
-
-- `http://localhost:8080`
-
-7. In dashboard, set API base URL:
-
-- `http://127.0.0.1:3000`
-
-Notes:
-- `sam.local.env.json` is local-only (gitignored) and overrides `CACHE_PROVIDER` to `memory`.
-- If you rotate Gemini key, update `sam.local.env.json` (and optionally `.env.local`).
-
-### Invoke sample events
-
-```bash
+# Invoke Lambda events directly (requires Docker + sam build first)
 sam local invoke ApiFunction -e events/get-products-mortgages.json
 sam local invoke ApiFunction -e events/post-compare-mortgages.json
 sam local invoke ApiFunction -e events/get-recommendations.json
 ```
 
-## 8) Deployment
+---
+
+## Deployment to AWS
 
 ```bash
-npm install
+# Uses deploy-prod.ps1 — validates template, builds, deploys
 npm run deploy:prod
-```
 
-`deploy:prod` performs:
-- SAM template lint validation
-- containerized build
-- non-interactive deploy with parameter overrides
-
-If you use a named AWS profile:
-
-```powershell
+# With a named AWS profile:
 powershell -ExecutionPolicy Bypass -File .\scripts\deploy-prod.ps1 -AwsProfile your-profile
 ```
 
-After deploy, use CloudFormation output `ApiBaseUrl`.
-
-If you prefer manual deploy:
+**Manual deploy:**
 
 ```bash
+sam build --use-container
+
 sam deploy \
   --stack-name uk-financial-products-comparison-prod \
   --region eu-west-2 \
@@ -279,93 +264,127 @@ sam deploy \
   --parameter-overrides \
     StageName=v1 \
     GeminiApiKey=YOUR_KEY \
-    AllowedOrigins=* \
-    CorsAllowOrigin=* \
+    AllowedOrigins="*" \
+    CorsAllowOrigin="*" \
     CacheTtlSeconds=3600 \
     EnableExchangeData=false \
     CacheTableName=uk-financial-products-comparison-prod-cache
 ```
 
-## 9) Security & Backend Quality Controls
+After deploy, copy the `ApiBaseUrl` from CloudFormation outputs and paste it into the dashboard.
 
-- Strict input validation and typed normalization
-- Standardized error classes; sanitized external errors
-- No stack traces leaked to API clients
-- CORS managed explicitly (support for allowlist)
-- Security headers on all responses
-- External request timeout + retry strategy
-- DynamoDB TTL caching to reduce API pressure and cost
-- AI fallback mode to preserve service continuity
-- Conservative recommendation language and disclaimers
+**Frontend hosting** — upload the `frontend/` directory to an S3 bucket with static website hosting or serve via CloudFront.
 
-## 10) Testing
+---
 
-Run unit tests:
+## Testing
 
 ```bash
 npm test
 ```
 
-Test scope:
-- validation guardrails
-- comparison scoring logic
-- market data service behavior + cache semantics
+| Suite | Coverage |
+|-------|----------|
+| `boeClient` | CSV parsing, "31 Jan 2025" date format, missing values (`.`), empty CSV, empty series codes |
+| `onsClient` | ONS generator CSV, monthly/annual/quarterly rows, metadata skipping, empty input |
+| `comparisonService` | Mortgage risk scoring, savings real-return weighting, credit card total-cost model |
+| `marketDataService` | Full data pipeline with mocks, cache hit/miss semantics, real-return calculation, FX snapshot |
+| `httpSecurity` | CORS origin allowlist, security headers, error sanitisation, body size limit, XSS-safe responses |
+| `retry` | Exponential backoff, max-attempts enforcement, `shouldRetry` predicate |
+| `validator` | Input validation, category guard, criteria normalisation, JSON/text criteria parsing |
 
-End-to-end local smoke (tests + build + start-api + endpoint calls):
+---
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\smoke-local.ps1
+## Security Controls
+
+| Control | Implementation |
+|---------|----------------|
+| **API key not in URL** | Gemini key sent via `x-goog-api-key` header — never appears in CloudWatch access logs |
+| **No stack traces to clients** | `errorResponse()` sanitises all non-`ValidationError` messages to generic strings |
+| **Body size limit** | `parseJsonBody` rejects payloads > 50 KB before JSON.parse |
+| **Prompt injection mitigation** | User free-text stripped of control characters, capped at 300 chars, injected after system instructions |
+| **XSS prevention** | All API data passed through `escHtml()` before any DOM insertion |
+| **CORS allowlist** | Non-allowlisted origins receive `Access-Control-Allow-Origin: null` |
+| **Security headers** | `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `CSP: default-src 'none'`, `Cache-Control: no-store`, `Referrer-Policy: no-referrer` |
+| **DynamoDB encryption** | `SSEEnabled: true` in CloudFormation |
+| **DynamoDB PITR** | `PointInTimeRecoveryEnabled: true` |
+| **IAM least-privilege** | `DynamoDBCrudPolicy` scoped to the single cache table |
+| **Reserved concurrency** | Lambda capped at 10 concurrent executions to prevent runaway costs |
+| **AI fallback** | Gemini failure → deterministic rule-based recommendation (no silent null response) |
+
+---
+
+## Leadership & Architecture
+
+### 1. Trade-offs
+
+**Single Lambda vs per-route Lambdas** — one Lambda with explicit route dispatch keeps cold-start variance uniform, shares a warm DynamoDB connection pool, and produces one deployment artefact. The trade-off is that a CPU-heavy route could theoretically delay others under high concurrency, mitigated by the reserved concurrency cap and 15-second timeout.
+
+**In-memory cache locally / DynamoDB in AWS** — the `cacheFactory` pattern lets the same code run locally without Docker-DynamoDB while using encrypted, TTL-managed DynamoDB in production. Local cache does not survive cold starts, which is acceptable in dev but irrelevant in production where Lambda instances are long-lived.
+
+**ONS website generator instead of the retired API** — `api.ons.gov.uk` was decommissioned on 25 November 2024. The `ons.gov.uk/generator?format=csv` endpoint serves the same underlying dataset. Trade-off: the CSV format is less structured (mixed metadata + data rows) and requires more defensive parsing, but it is the only zero-auth public inflation source.
+
+**Gemini key in header, not query param** — prevents the key appearing in CloudWatch access logs, load-balancer logs, and browser network tab. Zero performance trade-off. Google's Gemini API fully supports the `x-goog-api-key` header.
+
+**Plain JS frontend with Chart.js CDN** — no build pipeline means the dashboard deploys as static files to any CDN with no CI step. Trade-off: no component reactivity; state is managed imperatively. Acceptable for a comparison tool with a small, well-defined interaction surface.
+
+**Frankfurter as FX source** — free, no registration, ECB-backed data, and serves as the fallback when exchangerate.host is unavailable. Trade-off: rates are end-of-day ECB reference rates, not real-time mid-market.
+
+### 2. Team Planning — 3 developers, 2 weeks
+
+```
+Days 1–3   Dev A │ IaC (SAM template, DynamoDB, IAM), Lambda skeleton, CI pipeline skeleton
+           Dev B │ BoE + ONS adapters, CSV/date normalisation, unit tests (boeClient, onsClient)
+           Dev C │ API contract + Postman collection, frontend scaffold, tab navigation
+
+Days 4–7   Dev A │ Caching layer (DynamoDB + in-memory factory), retry/timeout strategy, CloudWatch alarms
+           Dev B │ Gemini integration, prompt engineering, deterministic fallback, AI output tests
+           Dev C │ Products table, Chart.js trend visualisation, compare/recommend flow
+
+Days 8–11  Dev A │ Prod deploy + WAF rule + usage plan + synthetic canary
+           Dev B │ AI evaluation harness, prompt hardening, data-freshness monitor
+           Dev C │ Accessibility pass (ARIA), responsive layout, cross-browser QA
+
+Days 12–14 All   │ Dress rehearsal (deploy from clean clone), README, demo recording, interview prep
 ```
 
-## 11) Leadership & Architecture Section
+Shared: daily 15-min standup, mandatory PR review (1 approver), feature flags for anything touching the Gemini prompt.
 
-### 11.1 Trade-offs
+### 3. Production Readiness — What to add before go-live
 
-- Chose **single Lambda** for simplicity and deployment speed; trade-off is tighter coupling of routes compared to per-domain Lambdas.
-- Used **deterministic fallback** for recommendations; trade-off is less nuanced output when AI is unavailable, but reliability is higher.
-- Avoided frontend frameworks to keep review/deploy friction low; trade-off is less component abstraction versus React/Vue.
+- **Auth** — AWS Cognito user pool + JWT authorizer on API Gateway; per-user rate limits via usage plans
+- **WAF** — AWS WAF rate-based rule + OWASP managed rule group on the API Gateway stage
+- **Secrets management** — move Gemini key from Lambda env var to AWS Secrets Manager; fetch at cold start with caching
+- **Observability** — X-Ray tracing with correlation IDs propagated to all downstream calls; CloudWatch Logs Insights dashboards for error rates and latency percentiles
+- **Alerting** — CloudWatch alarms on Lambda error rate > 1%, P99 duration > 10 s, DynamoDB throttle count > 0
+- **Contract tests** — Pact consumer-driven contract tests against BoE/ONS to detect upstream API schema drift before it causes silent data quality issues
+- **Synthetic canary** — CloudWatch Synthetics canary running every 5 min against `/products/mortgages` in production
+- **CI/CD** — GitHub Actions: lint → unit test → SAM build → integration test in staging → prod deploy on merge to `main`
+- **Data freshness monitor** — scheduled Lambda that alerts if the latest BoE series date is > 45 days old
+- **DPIA** — document that user-entered free text passes through Gemini; no PII is persisted, but this must be in the privacy notice
 
-### 11.2 Team Planning (3 devs, 2 weeks)
+### 4. What I would build next
 
-- Dev A (Backend/Platform): Lambda architecture, adapters, caching, IaC, observability.
-- Dev B (Data/AI): data normalization quality, AI prompting, evaluation harness, fallback tuning.
-- Dev C (Frontend/QA): dashboard UX, API integration, accessibility, e2e smoke tests.
-- Shared milestones:
-  - Days 1-3: API skeleton + IaC + first live source
-  - Days 4-6: second source + compare/recommendation logic
-  - Days 7-9: frontend integration + testing
-  - Days 10-12: hardening + observability + docs
-  - Days 13-14: dress rehearsal + release candidate
+- **Personalised eligibility filtering** — integrate FCA Register API to surface only FCA-authorised products matching a user-supplied credit profile
+- **Historical backtesting** — "If you had fixed 2 years ago vs stayed variable, what would you have paid?" — turns raw trend data into a concrete decision-support narrative
+- **Rate alert subscriptions** — SQS + Lambda + SES: user sets a threshold, receives email when the BoE rate crosses it
+- **Prompt versioning and evaluation** — store prompt versions in DynamoDB; A/B test Gemini outputs against human-rated ground truth to measure recommendation quality over time
+- **Multi-region active-active** — DynamoDB global tables + Route 53 latency routing for UK/EU availability SLA
 
-### 11.3 Production Readiness Upgrades
+---
 
-- Add Cognito auth + per-user quotas/rate-limits
-- Add WAF rules + API Gateway usage plans
-- Add contract tests and synthetic canaries
-- Add structured tracing (X-Ray + correlation IDs across external calls)
-- Add data quality monitors (schema drift, stale source detection)
-- Add prompt/version management and AI output evaluation metrics
+## Troubleshooting
 
-### 11.4 If More Time
+| Symptom | Cause & Fix |
+|---------|-------------|
+| `recommendation.mode = "rules-fallback"` | Gemini API unavailable or quota exhausted. Check `GEMINI_API_KEY` in `sam.local.env.json`; check quota at https://aistudio.google.com |
+| `sam` command not found on Windows | Use full path: `C:\Users\<you>\AppData\Local\Programs\Amazon\AWSSAMCLI\bin\sam.cmd` |
+| ONS data missing / empty | `ONS_BASE_URL` must be `https://www.ons.gov.uk` — the old `https://api.ons.gov.uk` was decommissioned Nov 2024 |
+| Credit card APR always `null` | Series code must be `IUMCCTL` — `HSDG` is not a valid BoE series and returns HTML |
+| Lambda timeout in local mode | Increase `REQUEST_TIMEOUT_MS` in `sam.local.env.json`, or run `sam local start-api --warm-containers EAGER` |
+| AWS deploy fails — credentials error | Run `aws configure` or export `AWS_PROFILE` before deploying |
+| `NODE_TLS_REJECT_UNAUTHORIZED` warning in smoke script | Expected in some corporate/proxy environments; does not affect the Lambda or production deployment |
 
-- Personalized product matching engine (eligibility-aware)
-- Historical backtesting for recommendation quality
-- Explainability panel with confidence and scenario sensitivity
-- CI/CD pipeline with automated security scans (SAST, dependency, IaC checks)
+---
 
-## 12) Notes
-
-- This project is an informational comparison tool, not personal regulated advice.
-- Always verify rates, eligibility, total fees, and contractual terms with regulated providers before financial decisions.
-
-## 13) Troubleshooting
-
-- If recommendation mode is `rules-fallback`, check:
-  - `GEMINI_API_KEY` in `sam.local.env.json`
-  - Gemini quota/rate limits (`429 RESOURCE_EXHAUSTED`)
-  - outbound network access from local Docker/SAM environment
-- If `sam` is not found on Windows after installation, use:
-  - `C:\Users\<you>\AppData\Local\Programs\Amazon\AWSSAMCLI\bin\sam.cmd`
-- If `npm run deploy:prod` fails due missing AWS credentials:
-  - configure AWS credentials/profile first (`aws configure` or SSO profile)
-  - or run deploy script with `-AwsProfile your-profile`
+*This is an informational comparison tool. It does not constitute regulated financial advice under the Financial Services and Markets Act 2000 (FSMA). Always verify rates, eligibility, total costs, and terms directly with FCA-authorised providers before making any financial decision.*

@@ -1,11 +1,32 @@
+# AWS SAM build artefacts
 .aws-sam/
+
+# Node
 node_modules/
 coverage/
+npm-debug.log*
+
+# Secrets (never commit)
 .env
 .env.local
 sam.local.env.json
+
+# Build / dist
 dist/
-npm-debug.log*
+
+# Runtime logs
 sam-local*.log
 sam-install*.log
+dev-server*.log
+dev-server.pid
+*.log
+
+# IDE / tool configs
+.claude/
+
+# Windows installers / downloads
 *.msi
+AWSCLIV2.msi
+
+# Internal project docs (not part of submission)
+PRODUCTION_CHECKLIST.md
