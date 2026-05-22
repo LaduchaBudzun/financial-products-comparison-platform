@@ -29,12 +29,21 @@ try {
     Write-Warning "sam.local.env.json not found -- copy sam.local.env.example.json and add your GEMINI_API_KEY."
   }
 
+  # Kill any process already listening on the API port
+  $existing = netstat -ano | Select-String ":$ApiPort\s.*LISTENING"
+  if ($existing) {
+    $pid = ($existing -split '\s+')[-1]
+    Write-Host "Stopping existing process on port $ApiPort (PID $pid)..." -ForegroundColor Gray
+    Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 1
+  }
+
   Write-Host "Starting API dev server on port $ApiPort..." -ForegroundColor Cyan
 
   $apiLog    = Join-Path $env:TEMP "dev-server-run.log"
   $apiErrLog = Join-Path $env:TEMP "dev-server-run-err.log"
-  if (Test-Path $apiLog)    { Remove-Item $apiLog    -Force }
-  if (Test-Path $apiErrLog) { Remove-Item $apiErrLog -Force }
+  try { if (Test-Path $apiLog)    { Remove-Item $apiLog    -Force } } catch {}
+  try { if (Test-Path $apiErrLog) { Remove-Item $apiErrLog -Force } } catch {}
 
   $env:PORT = "$ApiPort"
   $apiProc = Start-Process -FilePath $node `
